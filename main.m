@@ -92,7 +92,7 @@ bineq1
 eq_count1
 ineq_count1
 
-% Capacity & Flow Constraints
+%% Capacity & Flow Constraints
 
 lb2 = zeros(total_nodes^2 *K,1);
 ub2 = targets*ones(total_nodes^2 *K,1);
@@ -165,8 +165,21 @@ Aeq2 = [[x_Aeq2;zeros(y-x,(total_nodes^2 *K))],p_Aeq2,zeros(m,total_nodes)];
 
 % Fuel Constraints
 
+lb3 = zeros(total_nodes,1);
+ub3 = L*ones(total_nodes,1);
+
 Aineq2 = zeros(1,(total_nodes^2 *K) *2 +total_nodes);
 bineq2 = zeros(1,1);
+
+ri = zeros(1,total_nodes);
+
+for k=1:K
+    for i=1:total_nodes
+        for j=1:total_nodes
+            
+        end
+    end
+end
 
 
 
@@ -209,5 +222,4 @@ ub = [ub1;ub2];
 
 %doesn't work with cplexmilp  %todo
 Y = cplexlp(f,Aineq,bineq,Aeq,beq,lb,ub)
-
 
