@@ -22,6 +22,8 @@ qk = 0.35; %todo
 %Define the starting point of the robots
 Bk = [targets+1, targets+2]; %starting depot
 
+%Shortest distance between the nodes
+map
 
 %% Constraints
 
@@ -49,7 +51,7 @@ for k=1:K
      for i=1:total_nodes
          for j=1:total_nodes 
              if i<=targets
-                 Aeq1(i,j+(i-1)*total_nodes) = 1;
+                 Aeq1(i,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = 1;
                  beq1(i,1) = 1;
              
                  Aeq1(i+targets, i+(j-1)*total_nodes) = 1;
@@ -71,8 +73,13 @@ for k=1:K
         [x,~] = size(Aeq1);
         [m,~] = size(beq1);
         for i=1:total_nodes
-           Aeq1(x+1,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = 1;
-           Aeq1(x+1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = -1;
+           if j==i
+                    flag=0;
+                else
+                    flag=1;
+                end
+           Aeq1(x+1,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = 1*flag;
+           Aeq1(x+1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = -1*flag;
            beq1(m+1) = 0;
         end 
     end
@@ -85,14 +92,8 @@ end
 eq_count1 = m;
 ineq_count1 = n;
 
-Aeq1
-beq1 
-Aineq1
-bineq1
-eq_count1
-ineq_count1
 
-% Capacity & Flow Constraints
+%% Capacity & Flow Constraints
 
 lb2 = zeros(total_nodes^2 *K,1);
 ub2 = targets*ones(total_nodes^2 *K,1);
@@ -102,6 +103,11 @@ beq2 = zeros(1,1);
 x_Aeq2 = zeros(1,(total_nodes^2 *K));
 p_Aeq2 = zeros(1,(total_nodes^2 *K));
 temp = zeros(1,(total_nodes^2 *K));
+
+Aineq2 = zeros(1,(total_nodes^2 *K) *2 +total_nodes);
+x_Aineq2 = zeros(1,(total_nodes^2 *K));
+p_Aineq2 = zeros(1,(total_nodes^2 *K));
+bineq2 = zeros(1,1);
 
 for k=1:K
     for i=1:total_nodes
@@ -157,18 +163,100 @@ for k=1:K
     end
 end
 
+count = 1;
+for k=1:K
+    for i=1:total_nodes
+        for j=1:total_nodes
+            p_Aineq2(count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = 1;
+            x_Aineq2(count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = -targets;
+            bineq2(count,1) = 0;
+            count = count+1;
+        end
+    end
+end
+
 [x,~] = size(x_Aeq2);
 [y,~] = size(p_Aeq2);
 [m,~] = size(beq2);
 Aeq2 = [[x_Aeq2;zeros(y-x,(total_nodes^2 *K))],p_Aeq2,zeros(m,total_nodes)];
 
+[x,~] = size(x_Aineq2);
+Aineq2 = [x_Aineq2,p_Aineq2,zeros(x,total_nodes)]; 
 
-% Fuel Constraints
+%% Fuel Constraints
 
-Aineq2 = zeros(1,(total_nodes^2 *K) *2 +total_nodes);
-bineq2 = zeros(1,1);
+lb3 = zeros(total_nodes,1);
+ub3 = L*ones(total_nodes,1);
 
+% Large constant
+M = L + max(fij(:));
 
+r_Aineq2 = zeros(1,total_nodes);
+x_Aineq2f = zeros(1,(total_nodes^2 *K));
+
+count = 1;
+[m,~] = size(bineq2);
+[r,~] = size(r_Aineq2);
+for k=1:K
+    for i=1:targets
+        for j=1:targets
+            % Equation 15
+            r_Aineq2(count,j) = 1;
+            r_Aineq2(count,i) = -1;
+            x_Aineq2f(count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
+            
+            bineq2(m+count,1) = M-fij(i,j);
+            count = count+1;
+            
+            % Equation 16
+            r_Aineq2(targets^2*k+count,i) = 1;
+            r_Aineq2(targets^2*k+count,j) = -1;
+            x_Aineq2f(targets^2*k+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
+            
+            bineq2(targets^2*k+m+count,1) = M+fij(i,j);
+            
+        end
+    end
+end
+
+count = 1;
+[m,~] = size(bineq2);
+[r,~] = size(r_Aineq2);
+for k=1:K
+    for i=targets+1:total_nodes
+        for j=1:targets
+            % Equation 17
+            r_Aineq2(r+count,j) = -1;
+            x_Aineq2f(r+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
+            bineq2(m+count,1) = M-L+fij(i,j);
+            
+            % Equation 18
+            r_Aineq2(depots*targets*2+r+count,j) = 1;
+            x_Aineq2f(depots*targets*2+r+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
+            bineq2(depots*targets*2+m+count,1) = M+L-fij(i,j);
+            
+            count = count+1;
+        end
+    end
+end
+
+count = 1;
+[m,~] = size(bineq2);
+[r,~] = size(r_Aineq2);
+for k=1:K
+    for i=1:targets
+        for j=targets+1:total_nodes
+            % Equation 19
+            r_Aineq2(r+count,j) = -1;
+            x_Aineq2f(r+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
+            bineq2(m+count,1) = M+fij(i,j);
+            count = count+1;
+        end
+    end
+end
+
+[x,~] = size(x_Aineq2f);
+Aineq2 = [Aineq2; x_Aineq2f,zeros(x,total_nodes^2 *K),r_Aineq2];
 
 % To get the total number of in/equality equations
 [m,~] = size(beq2);
@@ -176,20 +264,12 @@ bineq2 = zeros(1,1);
 eq_count2 = m;
 ineq_count2 = n;
 
-Aeq2
-beq2 
-Aineq2
-bineq2
-eq_count2
-ineq_count2
+
 
 %% Objective Function
 
-%Shortest distance between the nodes
-map
+f = [cij;zeros((total_nodes^2 *K) + total_nodes,1)];
 
-%f = (ones(total_nodes^2 *K,1)+cij);
-f = cij;
  
 %Pmax = (1+qk)* cij* xijk;
 %f = (1+qk)*cij;
@@ -198,8 +278,8 @@ Aineq = [Aineq1, zeros(ineq_count1,total_nodes^2 *K +total_nodes);Aineq2];
 bineq = [bineq1;bineq2];
 Aeq = [Aeq1,zeros(eq_count1,total_nodes^2 *K+total_nodes);Aeq2];
 beq = [beq1;beq2];
-lb = [lb1;lb2];
-ub = [ub1;ub2];
+lb = [lb1;lb2;lb3];
+ub = [ub1;ub2;ub3];
 
 %% CPLEX optimization
 
@@ -208,6 +288,6 @@ ub = [ub1;ub2];
 %X = intlinprog(f,total_nodes^2 *K,Aineq,bineq,Aeq,beq,lb,ub)
 
 %doesn't work with cplexmilp  %todo
+tic
 Y = cplexlp(f,Aineq,bineq,Aeq,beq,lb,ub)
-
-
+toc
