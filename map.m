@@ -13,6 +13,7 @@ yd = randi(10,depots,1);
 nodes = [xt,yt;xd,yd];
 
 e_dist = pdist2(nodes,nodes);
+fij = e_dist;
 cij_per_robot = reshape(e_dist',total_nodes^2,1);
 cij=zeros(total_nodes^2 *K,1);
 for k=1:K
