@@ -1,5 +1,15 @@
 
 %% MILP Formulation of Multi-Robot Long-Term Persistent Coverage Problem
+%
+% Reference: D. Mitchell, M. Corah, N. Chakraborty, K. Sycara and
+% N. Michael, "Multi-robot long-term persistent coverage with fuel
+% constrained robots," 2015 IEEE (ICRA)
+%
+% $Author Dharini Dutia     `        $Date June 2018
+%
+% The indices are modular in terms of the changes in environmental
+% parameters. But not with placing, it works sequentially.
+
 
 clc; clear all; close all;
 
@@ -20,19 +30,22 @@ K = 2;
 qk = 0.35; %todo
 
 %Define the starting point of the robots
-Bk = [targets+1, targets+2]; %starting depot
+Bk = [targets+1, targets+2]; %starting from depots
 
 %Shortest distance between the nodes
 map
 
-%% Constraints
+%% Degree Constraints
 
 % Integer (bound) constraints
+% Equation 4
 lb1 = zeros(total_nodes^2 *K,1); %size of X
+% upper bound 1 for targets and |T| for depots
 ub1 = targets*ones(total_nodes^2 *K,1);
 for k=1:K
     for i=1:total_nodes
         for j=1:targets
+            % Equation 5
             ub1(j+(i-1)*total_nodes+(k-1)*total_nodes^2,1) = 1;
         end
     end
@@ -47,41 +60,44 @@ bineq1 = zeros(1,1);
 
 for k=1:K
     %set without starting node
-     %woB = N(N~=Bk(k)); 
-     for i=1:total_nodes
-         for j=1:total_nodes 
-             if i<=targets
-                 Aeq1(i,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = 1;
-                 beq1(i,1) = 1;
-             
-                 Aeq1(i+targets, i+(j-1)*total_nodes) = 1;
-                 beq1(i+targets,1) = 1;
-             
-             end
-         end
-         
-         Aineq1(k,i+(Bk(k)-1)*total_nodes) = 1;
-         bineq1(k,1) = 1;
-         Aineq1(k+K,Bk(k)+(i-1)*total_nodes) = 1;
-         bineq1(k+K,1) = 1;
-     end
+    %woB = N(N~=Bk(k));
+    for i=1:total_nodes
+        for j=1:total_nodes
+            if i<=targets
+                % Equation 6
+                Aeq1(i,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = 1;
+                beq1(i,1) = 1;
+                
+                % Equation 7
+                Aeq1(i+targets, i+(j-1)*total_nodes+(k-1)*total_nodes^2) = 1;
+                beq1(i+targets,1) = 1;
+                
+            end
+        end
+        % Equation 8
+        Aineq1(k,i+(Bk(k)-1)*total_nodes) = 1;
+        bineq1(k,1) = 1;
+        % Equation 9
+        Aineq1(k+K,Bk(k)+(i-1)*total_nodes) = 1;
+        bineq1(k+K,1) = 1;
+    end
 end
 
-
+% Equation 10
 for k=1:K
     for j=1:total_nodes
         [x,~] = size(Aeq1);
         [m,~] = size(beq1);
         for i=1:total_nodes
-           if j==i
-                    flag=0;
-                else
-                    flag=1;
-                end
-           Aeq1(x+1,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = 1*flag;
-           Aeq1(x+1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = -1*flag;
-           beq1(m+1) = 0;
-        end 
+            if j==i
+                flag=0;
+            else
+                flag=1;
+            end
+            Aeq1(x+1,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = 1*flag;
+            Aeq1(x+1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = -1*flag;
+            beq1(m+1) = 0;
+        end
     end
 end
 
@@ -95,9 +111,9 @@ ineq_count1 = n;
 
 %% Capacity & Flow Constraints
 
+% Equation 14 - Part 1/2
 lb2 = zeros(total_nodes^2 *K,1);
 ub2 = targets*ones(total_nodes^2 *K,1);
-
 
 beq2 = zeros(1,1);
 x_Aeq2 = zeros(1,(total_nodes^2 *K));
@@ -113,22 +129,25 @@ for k=1:K
     for i=1:total_nodes
         for j=1:total_nodes
             if j<=targets
+                % Equation 11 - Part 1/2
                 x_Aeq2(k,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = -1;
                 beq2(k,1) = 0;
                 
-             
+                % Equation 12 - Part 1/
                 x_Aeq2(K+i,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = -1;
                 beq2(K+i,1) = 0;
             end
             
         end
+        % Equation 11 & 12 - Part 2/2
         p_Aeq2(k,i+(Bk(k)-1)*total_nodes+(k-1)*total_nodes^2) = 1;
-        temp(1,Bk(k)+(i-1)*total_nodes+(k-1)*total_nodes^2) = -1; 
+        temp(1,Bk(k)+(i-1)*total_nodes+(k-1)*total_nodes^2) = -1;
         p_Aeq2(k,:) = p_Aeq2(k,:) + temp(1,:);
         temp = zeros(1,(total_nodes^2 *K));
     end
 end
 
+% Equation 13
 temp = zeros(1,(total_nodes^2 *K));
 for k=1:K
     for i=1:total_nodes
@@ -145,7 +164,7 @@ for k=1:K
                 temp = zeros(1,(total_nodes^2 *K));
             end
             
-            if j>targets 
+            if j>targets
                 if j==i
                     flag=0;
                 else
@@ -159,10 +178,11 @@ for k=1:K
                 beq2(K+total_nodes+i,1) = 0;
             end
             
-        end 
+        end
     end
 end
 
+% Equation 14 - Part 2/2
 count = 1;
 for k=1:K
     for i=1:total_nodes
@@ -181,10 +201,11 @@ end
 Aeq2 = [[x_Aeq2;zeros(y-x,(total_nodes^2 *K))],p_Aeq2,zeros(m,total_nodes)];
 
 [x,~] = size(x_Aineq2);
-Aineq2 = [x_Aineq2,p_Aineq2,zeros(x,total_nodes)]; 
+Aineq2 = [x_Aineq2,p_Aineq2,zeros(x,total_nodes)];
 
 %% Fuel Constraints
 
+% Equation 20
 lb3 = zeros(total_nodes,1);
 ub3 = L*ones(total_nodes,1);
 
@@ -270,7 +291,7 @@ ineq_count2 = n;
 
 f = [cij;zeros((total_nodes^2 *K) + total_nodes,1)];
 
- 
+
 %Pmax = (1+qk)* cij* xijk;
 %f = (1+qk)*cij;
 
@@ -289,5 +310,6 @@ ub = [ub1;ub2;ub3];
 
 %doesn't work with cplexmilp  %todo
 tic
-Y = cplexlp(f,Aineq,bineq,Aeq,beq,lb,ub)
+Y = cplexmilp(f,Aineq,bineq,Aeq,beq,lb,ub)
 toc
+
