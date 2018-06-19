@@ -5,7 +5,7 @@
 % N. Michael, "Multi-robot long-term persistent coverage with fuel
 % constrained robots," 2015 IEEE (ICRA)
 %
-% $Author Dharini Dutia     `        $Date June 2018
+% $Author Dharini Dutia     `        $Created June 2018
 %
 % The indices are modular in terms of the changes in environmental
 % parameters. But not with placing, it works sequentially.
@@ -19,18 +19,18 @@ clc; clear all; close all;
 L = 10; %todo
 
 %Nodes
-targets = 5; T = 1:1:targets;
-depots = 3;  D = targets+1:1:targets+depots;
+targets = 2; T = 1:1:targets;
+depots = 1;  D = targets+1:1:targets+depots;
 total_nodes = targets+depots; N = [T,D];
 
 %Number of robots
 K = 2;
 
 %Ratio of time needed to refuel and time spent traversing the tour
-qk = 0.35; %todo
+qk = randi([0,1],K,1); %todo
 
 %Define the starting point of the robots
-Bk = [targets+1, targets+2]; %starting from depots
+Bk = randi([D(1),D(depots)],K,1); %starting from depots
 
 %Shortest distance between the nodes
 map
@@ -113,7 +113,7 @@ ineq_count1 = n;
 
 % Equation 14 - Part 1/2
 lb2 = zeros(total_nodes^2 *K,1);
-ub2 = targets*ones(total_nodes^2 *K,1);
+ub2 = Inf*ones(total_nodes^2 *K,1); %targets*ones(total_nodes^2 *K,1);
 
 beq2 = zeros(1,1);
 x_Aeq2 = zeros(1,(total_nodes^2 *K));
@@ -128,18 +128,18 @@ bineq2 = zeros(1,1);
 for k=1:K
     for i=1:total_nodes
         for j=1:total_nodes
-            if j<=targets
+            if i<=targets
                 % Equation 11 - Part 1/2
                 x_Aeq2(k,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = -1;
                 beq2(k,1) = 0;
                 
-                % Equation 12 - Part 1/
-                x_Aeq2(K+i,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = -1;
-                beq2(K+i,1) = 0;
+                % Equation 12 - Part 1/2
+                x_Aeq2(K+i+(k-1)*targets,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = -1;
+                beq2(K+i+(k-1)*targets,1) = 0;
             end
             
         end
-        % Equation 11 & 12 - Part 2/2
+        % Equation 11 - Part 2/2
         p_Aeq2(k,i+(Bk(k)-1)*total_nodes+(k-1)*total_nodes^2) = 1;
         temp(1,Bk(k)+(i-1)*total_nodes+(k-1)*total_nodes^2) = -1;
         p_Aeq2(k,:) = p_Aeq2(k,:) + temp(1,:);
@@ -147,38 +147,50 @@ for k=1:K
     end
 end
 
-% Equation 13
 temp = zeros(1,(total_nodes^2 *K));
+[y,~] = size(p_Aeq2);
+count =1;
 for k=1:K
     for i=1:total_nodes
         for j=1:total_nodes
-            if j<=targets
+            % Equation 12 - Part 2/2
+            if i<=targets
                 if j==i
                     flag=0;
                 else
                     flag=1;
                 end
-                p_Aeq2(K+i,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = 1*flag;
-                temp(1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = -1*flag;
-                p_Aeq2(K+i,:) = p_Aeq2(K+i,:) + temp(1,:);
+                p_Aeq2(y+i+(k-1)*targets,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = -1*flag;
+                temp(1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = 1*flag;
+                p_Aeq2(y+i+(k-1)*targets,:) = p_Aeq2(y+i+(k-1)*targets,:) + temp(1,:);
                 temp = zeros(1,(total_nodes^2 *K));
             end
-            
-            if j>targets
-                if j==i
-                    flag=0;
-                else
-                    flag=1;
-                end
-                p_Aeq2(K+total_nodes+i,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = 1*flag;
-                temp(1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = -1*flag;
-                p_Aeq2(K+total_nodes+i,:) = p_Aeq2(K+total_nodes+i,:) + temp(1,:);
-                temp = zeros(1,(total_nodes^2 *K));
-                
-                beq2(K+total_nodes+i,1) = 0;
-            end
-            
         end
+    end
+end
+
+[y,~] = size(p_Aeq2);
+[m,~] = size(beq2);
+count =1;
+for k=1:K
+    for i=targets+1:total_nodes
+        for j=1:total_nodes
+            % Equation 13
+            if i>targets
+                if j==i
+                    flag=0;
+                else
+                    flag=1;
+                end
+                p_Aeq2(y+count,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = -1*flag;
+                temp(1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = 1*flag;
+                p_Aeq2(y+count,:) = p_Aeq2(y+count,:) + temp(1,:);
+                temp = zeros(1,(total_nodes^2 *K));
+               
+                beq2(m+count,1) = 0;
+            end
+        end
+        count = count +1;
     end
 end
 
@@ -207,10 +219,10 @@ Aineq2 = [x_Aineq2,p_Aineq2,zeros(x,total_nodes)];
 
 % Equation 20
 lb3 = zeros(total_nodes,1);
-ub3 = L*ones(total_nodes,1);
+ub3 = [L*ones(targets,1); Inf*ones(depots,1)];
 
 % Large constant
-M = L + max(fij(:));
+M = (L + max(fij(:)));
 
 r_Aineq2 = zeros(1,total_nodes);
 x_Aineq2f = zeros(1,(total_nodes^2 *K));
@@ -227,15 +239,15 @@ for k=1:K
             x_Aineq2f(count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
             
             bineq2(m+count,1) = M-fij(i,j);
-            count = count+1;
             
             % Equation 16
-            r_Aineq2(targets^2*k+count,i) = 1;
-            r_Aineq2(targets^2*k+count,j) = -1;
-            x_Aineq2f(targets^2*k+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
+            r_Aineq2(targets^2 *K+count,j) = -1;
+            r_Aineq2(targets^2 *K+count,i) = 1;
+            x_Aineq2f(targets^2 *K+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
             
-            bineq2(targets^2*k+m+count,1) = M+fij(i,j);
+            bineq2(targets^2 *K+m+count,1) = M+fij(i,j);
             
+            count = count+1;
         end
     end
 end
@@ -252,9 +264,9 @@ for k=1:K
             bineq2(m+count,1) = M-L+fij(i,j);
             
             % Equation 18
-            r_Aineq2(depots*targets*2+r+count,j) = 1;
-            x_Aineq2f(depots*targets*2+r+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
-            bineq2(depots*targets*2+m+count,1) = M+L-fij(i,j);
+            r_Aineq2(depots*targets*K+r+count,j) = 1;
+            x_Aineq2f(depots*targets*K+r+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
+            bineq2(depots*targets*K+m+count,1) = M+L-fij(i,j);
             
             count = count+1;
         end
@@ -270,7 +282,7 @@ for k=1:K
             % Equation 19
             r_Aineq2(r+count,j) = -1;
             x_Aineq2f(r+count,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = M;
-            bineq2(m+count,1) = M+fij(i,j);
+            bineq2(m+count,1) = M-fij(i,j);
             count = count+1;
         end
     end
@@ -285,30 +297,47 @@ Aineq2 = [Aineq2; x_Aineq2f,zeros(x,total_nodes^2 *K),r_Aineq2];
 eq_count2 = m;
 ineq_count2 = n;
 
+%% Including the constraint of Pmax
+
+Pmax_ineq = zeros(1,(total_nodes^2 *K)*2 + total_nodes +1);
+bineq_p = zeros(K,1);
+temp = zeros(1,total_nodes^2 *K);
+
+for k=1:K
+    for i=1:total_nodes
+        for j=1:total_nodes
+            temp(k,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = (1+qk(k))*cij(j+(i-1)*total_nodes+(k-1)*total_nodes^2);
+        end
+    end
+end
+
+Pmax_ineq = [-1*ones(K,1),temp,zeros(K,(total_nodes^2 *K) + total_nodes)];
+
+eq_count = eq_count1 + eq_count2
+ineq_count = ineq_count1 + ineq_count2 + K
 
 
-%% Objective Function
+%% Objective Function & Co-efficient matrices
 
-f = [cij;zeros((total_nodes^2 *K) + total_nodes,1)];
+% Objective function to be minimised
+f = [1;zeros((total_nodes^2 *K)*2 + total_nodes,1)];
 
 
-%Pmax = (1+qk)* cij* xijk;
-%f = (1+qk)*cij;
-
-Aineq = [Aineq1, zeros(ineq_count1,total_nodes^2 *K +total_nodes);Aineq2];
-bineq = [bineq1;bineq2];
-Aeq = [Aeq1,zeros(eq_count1,total_nodes^2 *K+total_nodes);Aeq2];
+% Combining the matrices
+Aineq = [Pmax_ineq;zeros(ineq_count1,1),Aineq1, zeros(ineq_count1,total_nodes^2 *K +total_nodes);zeros(ineq_count2,1),Aineq2];
+bineq = [bineq_p;bineq1;bineq2];
+Aeq = [zeros(eq_count1,1),Aeq1,zeros(eq_count1,total_nodes^2 *K+total_nodes);zeros(eq_count2,1),Aeq2];
 beq = [beq1;beq2];
-lb = [lb1;lb2;lb3];
-ub = [ub1;ub2;ub3];
+lb = [0;lb1;lb2;lb3];
+ub = [Inf;ub1;ub2;ub3];
 
 %% CPLEX optimization
 
-% X = xij of robot1; ... xij robot k; pij of robot1; ... robotk; ri..N
+% State variables = Pmax; xij of robot1; ... xij robot k; pij of robot1; ... robotk; ri..N
+% total variables = (total_nodes^2 *K)*2 + total_nodes +1
 
-%X = intlinprog(f,total_nodes^2 *K,Aineq,bineq,Aeq,beq,lb,ub)
+X = intlinprog(f,(total_nodes^2 *K)*2 + total_nodes +1,Aineq,bineq,Aeq,beq,lb,ub)
 
-%doesn't work with cplexmilp  %todo
 tic
 Y = cplexmilp(f,Aineq,bineq,Aeq,beq,lb,ub)
 toc
