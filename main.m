@@ -16,18 +16,18 @@ clc; clear all; close all;
 %% Defining the environment
 
 %Fuel capacity
-L = 10; %todo
+L = 1000; %todo
 
 %Nodes
-targets = 2; T = 1:1:targets;
-depots = 1;  D = targets+1:1:targets+depots;
+targets = 5; T = 1:1:targets;
+depots = 3;  D = targets+1:1:targets+depots;
 total_nodes = targets+depots; N = [T,D];
 
 %Number of robots
 K = 2;
 
 %Ratio of time needed to refuel and time spent traversing the tour
-qk = randi([0,1],K,1); %todo
+qk = 0.001*ones(K,1); %randi([0,1],K,1); %todo: revise
 
 %Define the starting point of the robots
 Bk = randi([D(1),D(depots)],K,1); %starting from depots
@@ -35,9 +35,10 @@ Bk = randi([D(1),D(depots)],K,1); %starting from depots
 %Shortest distance between the nodes
 map
 
-%% Degree Constraints
+total_vars = (total_nodes^2 *K)*2 + total_nodes + 1; 
 
-% Integer (bound) constraints
+
+%% Integer (bound) constraints
 % Equation 4
 lb1 = zeros(total_nodes^2 *K,1); %size of X
 % upper bound 1 for targets and |T| for depots
@@ -51,12 +52,58 @@ for k=1:K
     end
 end
 
-% Degree constraints
+% Equation 14 - Part 1/2
+lb2 = zeros(total_nodes^2 *K,1);
+ub2 = Inf*ones(total_nodes^2 *K,1); %targets*ones(total_nodes^2 *K,1);
+
+% Equation 20
+lb3 = zeros(total_nodes,1);
+ub3 = [L*ones(targets,1); Inf*ones(depots,1)];
+
+lb = [0;lb1;lb2;lb3];
+ub = [Inf;ub1;ub2;ub3];
+
+% Obtaining ctype
+for i =1:total_vars
+    ctype(i) = char('I');
+end
+for k=1:K
+    for i=1:total_nodes
+        for j=1:targets
+           ctype(j+(i-1)*total_nodes+(k-1)*total_nodes^2 +1) = char('B');
+        end
+    end
+end
+
+%% Including the constraint of Pmax
+
+Pmax_ineq = zeros(1,(total_nodes^2 *K)*2 + total_nodes +1);
+bineq_pmax = zeros(K,1);
+
+temp = zeros(K,total_nodes^2 *K);
+for k=1:K
+    for i=1:total_nodes
+        for j=1:total_nodes
+            temp(k,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = (1+qk(k))*cij(j+(i-1)*total_nodes+(k-1)*total_nodes^2);
+        end
+    end
+end
+
+Pmax_ineq = [-1*ones(K,1),temp,zeros(K,(total_nodes^2 *K) + total_nodes)];
+
+
+% Block test 1/3
+ f_pmax = [1;zeros((total_nodes^2 *K)*2 + total_nodes,1)];
+% X = intlinprog(f_pmax,total_vars,[],[],[],[],lb,ub)
+% Y = cplexmilp(f_pmax,Pmax_ineq,bineq_pmax,[],[], [],[],[],lb,ub,ctype)
+
+
+%% Degree Constraints
+
 Aeq1 = zeros(1,total_nodes^2 *K);
 beq1 = zeros(1,1);
 Aineq1 = zeros(1,total_nodes^2 *K);
 bineq1 = zeros(1,1);
-
 
 for k=1:K
     %set without starting node
@@ -108,12 +155,25 @@ end
 eq_count1 = m;
 ineq_count1 = n;
 
+% Block test 2/3
+Aineq_deg = [Pmax_ineq; zeros(n,1),Aineq1, zeros(n,total_nodes^2 *K +total_nodes)];
+bineq_deg = [bineq_pmax;bineq1];
+Aeq_deg = [zeros(m,1),Aeq1, zeros(m,total_nodes^2 *K +total_nodes)];
+X = cplexmilp(f_pmax,Aineq_deg,bineq_deg,Aeq_deg,beq1, [],[],[],lb,ub,ctype)
+
+count = 0;
+if ~isempty(X)
+    for k=1:K
+        start = 2+(k-1)*total_nodes^2 + count;
+        A(:,:,k) = reshape(X(start:start+total_nodes^2 -1),[total_nodes,total_nodes]);
+        plot(graph(A(:,:,k)))
+        hold on
+        count = count + 1;
+    end
+end
+
 
 %% Capacity & Flow Constraints
-
-% Equation 14 - Part 1/2
-lb2 = zeros(total_nodes^2 *K,1);
-ub2 = Inf*ones(total_nodes^2 *K,1); %targets*ones(total_nodes^2 *K,1);
 
 beq2 = zeros(1,1);
 x_Aeq2 = zeros(1,(total_nodes^2 *K));
@@ -213,13 +273,27 @@ end
 Aeq2 = [[x_Aeq2;zeros(y-x,(total_nodes^2 *K))],p_Aeq2,zeros(m,total_nodes)];
 
 [x,~] = size(x_Aineq2);
+[n,~] = size(bineq2);
 Aineq2 = [x_Aineq2,p_Aineq2,zeros(x,total_nodes)];
 
-%% Fuel Constraints
+% Block test 3/3
+% Aineq_cap = [Pmax_ineq; zeros(ineq_count1,1),Aineq1, zeros(ineq_count1,total_nodes^2 *K +total_nodes); zeros(n,1), Aineq2];
+% bineq_cap = [bineq_pmax;bineq1;bineq2];
+% Aeq_cap = [zeros(eq_count1,1),Aeq1, zeros(eq_count1,total_nodes^2 *K +total_nodes); zeros(m,1), Aeq2];
+% beq_cap = [beq1;beq2];
+% X = cplexmilp(f_pmax,Aineq_cap,bineq_cap,Aeq_cap,beq_cap, [],[],[],lb,ub,ctype)
+% 
+% count = 0;
+% if ~isempty(X)
+%     for k=1:K
+%         start = 2+(k-1)*total_nodes^2 + count;
+%         A(:,:,k) = reshape(X(start:start+total_nodes^2 -1),[total_nodes,total_nodes]);
+%         plot(graph(A(:,:,k)))
+%         count = count + 1;
+%     end
+% end
 
-% Equation 20
-lb3 = zeros(total_nodes,1);
-ub3 = [L*ones(targets,1); Inf*ones(depots,1)];
+%% Fuel Constraints
 
 % Large constant
 M = (L + max(fij(:)));
@@ -297,39 +371,23 @@ Aineq2 = [Aineq2; x_Aineq2f,zeros(x,total_nodes^2 *K),r_Aineq2];
 eq_count2 = m;
 ineq_count2 = n;
 
-%% Including the constraint of Pmax
-
-Pmax_ineq = zeros(1,(total_nodes^2 *K)*2 + total_nodes +1);
-bineq_p = zeros(K,1);
-temp = zeros(1,total_nodes^2 *K);
-
-for k=1:K
-    for i=1:total_nodes
-        for j=1:total_nodes
-            temp(k,j+(i-1)*total_nodes+(k-1)*total_nodes^2) = (1+qk(k))*cij(j+(i-1)*total_nodes+(k-1)*total_nodes^2);
-        end
-    end
-end
-
-Pmax_ineq = [-1*ones(K,1),temp,zeros(K,(total_nodes^2 *K) + total_nodes)];
-
-eq_count = eq_count1 + eq_count2
-ineq_count = ineq_count1 + ineq_count2 + K
-
 
 %% Objective Function & Co-efficient matrices
 
-% Objective function to be minimised
+% total number of in/equality equations
+eq_count = eq_count1 + eq_count2;
+ineq_count = ineq_count1 + ineq_count2 + K;
+
+% Objective function to be minimized
 f = [1;zeros((total_nodes^2 *K)*2 + total_nodes,1)];
 
 
 % Combining the matrices
 Aineq = [Pmax_ineq;zeros(ineq_count1,1),Aineq1, zeros(ineq_count1,total_nodes^2 *K +total_nodes);zeros(ineq_count2,1),Aineq2];
-bineq = [bineq_p;bineq1;bineq2];
+bineq = [bineq_pmax;bineq1;bineq2];
 Aeq = [zeros(eq_count1,1),Aeq1,zeros(eq_count1,total_nodes^2 *K+total_nodes);zeros(eq_count2,1),Aeq2];
 beq = [beq1;beq2];
-lb = [0;lb1;lb2;lb3];
-ub = [Inf;ub1;ub2;ub3];
+
 
 %% CPLEX optimization
 
@@ -339,6 +397,6 @@ ub = [Inf;ub1;ub2;ub3];
 X = intlinprog(f,(total_nodes^2 *K)*2 + total_nodes +1,Aineq,bineq,Aeq,beq,lb,ub)
 
 tic
-Y = cplexmilp(f,Aineq,bineq,Aeq,beq,lb,ub)
+Y = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
 toc
 
