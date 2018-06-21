@@ -10,10 +10,10 @@ yd = randi(10,depots,1);
 
 nodes = [xt,yt;xd,yd];
 
-A = ones(total_nodes);
-t = diag(ones(1,total_nodes));
-A = A -t;
-G = graph(A);
+% A = ones(total_nodes);
+% t = diag(ones(1,total_nodes));
+% A = A -t;
+% G = graph(A);
 
 %% Visualization
 % figure;
@@ -39,7 +39,7 @@ for k=1:K
 end
 
 % Fuel cost between two nodes
-fij = ones(total_nodes);
+fij = e_dist;%ones(total_nodes);
 
 
 
