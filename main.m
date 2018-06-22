@@ -19,7 +19,7 @@ clc; clear all; close all;
 L = 1000; %todo
 
 %Nodes
-targets = 5; T = 1:1:targets;
+targets = 10; T = 1:1:targets;
 depots = 3;  D = targets+1:1:targets+depots;
 total_nodes = targets+depots; N = [T,D];
 
@@ -27,10 +27,10 @@ total_nodes = targets+depots; N = [T,D];
 K = 2;
 
 %Ratio of time needed to refuel and time spent traversing the tour
-qk = 0.001*ones(K,1); %randi([0,1],K,1); %todo: revise
+qk = 0.1*ones(K,1); %randi([0,1],K,1); %todo: revise
 
 %Define the starting point of the robots
-Bk = randi([D(1),D(depots)],K,1); %starting from depots
+Bk = randi([D(1),D(depots)],K,1); %D(1:K); %starting from depots
 
 %Shortest distance between the nodes
 map
@@ -54,7 +54,7 @@ end
 
 % Equation 14 - Part 1/2
 lb2 = zeros(total_nodes^2 *K,1);
-ub2 = Inf*ones(total_nodes^2 *K,1); %targets*ones(total_nodes^2 *K,1);
+ub2 = targets*ones(total_nodes^2 *K,1); %Inf*ones(total_nodes^2 *K,1); %
 
 % Equation 20
 lb3 = zeros(total_nodes,1);
@@ -92,10 +92,11 @@ end
 Pmax_ineq = [-1*ones(K,1),temp,zeros(K,(total_nodes^2 *K) + total_nodes)];
 
 
-% Block test 1/3
- f_pmax = [1;zeros((total_nodes^2 *K)*2 + total_nodes,1)];
+ %%%%%%%%%%%%%%%%%%%% Block test 1/3  %%%%%%%%%%%%%%%%%%%%
+f_pmax = [1;zeros((total_nodes^2 *K)*2 + total_nodes,1)];
 % X = intlinprog(f_pmax,total_vars,[],[],[],[],lb,ub)
 % Y = cplexmilp(f_pmax,Pmax_ineq,bineq_pmax,[],[], [],[],[],lb,ub,ctype)
+Pmax_ineq2 = [-1*ones(K,1),temp];
 
 
 %% Degree Constraints
@@ -141,6 +142,7 @@ for k=1:K
             else
                 flag=1;
             end
+            flag = 1;
             Aeq1(x+1,j +(i-1)*total_nodes +(k-1)*total_nodes^2) = 1*flag;
             Aeq1(x+1,i +(j-1)*total_nodes +(k-1)*total_nodes^2) = -1*flag;
             beq1(m+1) = 0;
@@ -155,22 +157,28 @@ end
 eq_count1 = m;
 ineq_count1 = n;
 
-% Block test 2/3
+ %%%%%%%%%%%%%%%%%%%% Block test 2/3  %%%%%%%%%%%%%%%%%%%%
+% f_deg = [1;zeros(total_nodes^2 *K,1)];
+% Aineq_deg = [Pmax_ineq2; zeros(n,1),Aineq1];
+% bineq_deg = [bineq_pmax;bineq1];
+% Aeq_deg = [zeros(m,1),Aeq1]; 
+% X = cplexmilp(f_deg,Aineq_deg,bineq_deg,Aeq_deg,beq1, [],[],[],[0;lb1],[Inf;ub1],ctype(1:total_nodes^2 *K +1))
+
 Aineq_deg = [Pmax_ineq; zeros(n,1),Aineq1, zeros(n,total_nodes^2 *K +total_nodes)];
 bineq_deg = [bineq_pmax;bineq1];
 Aeq_deg = [zeros(m,1),Aeq1, zeros(m,total_nodes^2 *K +total_nodes)];
 X = cplexmilp(f_pmax,Aineq_deg,bineq_deg,Aeq_deg,beq1, [],[],[],lb,ub,ctype)
 
-count = 0;
 if ~isempty(X)
+    adaj = zeros(total_nodes,total_nodes);
     for k=1:K
-        start = 2+(k-1)*total_nodes^2 + count;
+        start = 2+(k-1)*total_nodes^2; 
         A(:,:,k) = reshape(X(start:start+total_nodes^2 -1),[total_nodes,total_nodes]);
-        plot(graph(A(:,:,k)))
-        hold on
-        count = count + 1;
+        adaj = adaj + A(:,:,k);
     end
+    plot(digraph(adaj),'XData', x_pos, 'YData', y_pos);
 end
+
 
 
 %% Capacity & Flow Constraints
@@ -254,7 +262,7 @@ for k=1:K
     end
 end
 
-% Equation 14 - Part 2/2
+%Equation 14 - Part 2/2
 count = 1;
 for k=1:K
     for i=1:total_nodes
@@ -276,22 +284,24 @@ Aeq2 = [[x_Aeq2;zeros(y-x,(total_nodes^2 *K))],p_Aeq2,zeros(m,total_nodes)];
 [n,~] = size(bineq2);
 Aineq2 = [x_Aineq2,p_Aineq2,zeros(x,total_nodes)];
 
-% Block test 3/3
-% Aineq_cap = [Pmax_ineq; zeros(ineq_count1,1),Aineq1, zeros(ineq_count1,total_nodes^2 *K +total_nodes); zeros(n,1), Aineq2];
-% bineq_cap = [bineq_pmax;bineq1;bineq2];
-% Aeq_cap = [zeros(eq_count1,1),Aeq1, zeros(eq_count1,total_nodes^2 *K +total_nodes); zeros(m,1), Aeq2];
-% beq_cap = [beq1;beq2];
-% X = cplexmilp(f_pmax,Aineq_cap,bineq_cap,Aeq_cap,beq_cap, [],[],[],lb,ub,ctype)
-% 
-% count = 0;
-% if ~isempty(X)
-%     for k=1:K
-%         start = 2+(k-1)*total_nodes^2 + count;
-%         A(:,:,k) = reshape(X(start:start+total_nodes^2 -1),[total_nodes,total_nodes]);
-%         plot(graph(A(:,:,k)))
-%         count = count + 1;
-%     end
-% end
+ %%%%%%%%%%%%%%%%%%%% Block test 3/3  %%%%%%%%%%%%%%%%%%%%
+Aineq_cap = [Pmax_ineq; zeros(ineq_count1,1),Aineq1, zeros(ineq_count1,total_nodes^2 *K +total_nodes); zeros(n,1), Aineq2];
+bineq_cap = [bineq_pmax;bineq1;bineq2];
+Aeq_cap = [zeros(eq_count1,1),Aeq1, zeros(eq_count1,total_nodes^2 *K +total_nodes); zeros(m,1), Aeq2];
+beq_cap = [beq1;beq2];
+X = cplexmilp(f_pmax,Aineq_cap,bineq_cap,Aeq_cap,beq_cap, [],[],[],lb,ub,ctype)
+
+if ~isempty(X)
+    adaj = zeros(total_nodes,total_nodes);
+    for k=1:K
+        start = 2+(k-1)*total_nodes^2; 
+        A(:,:,k) = reshape(X(start:start+total_nodes^2 -1),[total_nodes,total_nodes]);
+        adaj = adaj + A(:,:,k);
+    end
+    plot(graph(adaj),'XData', x_pos, 'YData', y_pos);
+end
+
+
 
 %% Fuel Constraints
 
@@ -399,4 +409,15 @@ X = intlinprog(f,(total_nodes^2 *K)*2 + total_nodes +1,Aineq,bineq,Aeq,beq,lb,ub
 tic
 Y = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
 toc
+
+if ~isempty(X)
+    adaj = zeros(total_nodes,total_nodes);
+    for k=1:K
+        start = 2+(k-1)*total_nodes^2; 
+        A(:,:,k) = reshape(X(start:start+total_nodes^2 -1),[total_nodes,total_nodes]);
+        adaj = adaj + A(:,:,k);
+    end
+    plot(graph(adaj),'XData', x_pos, 'YData', y_pos);
+end
+
 
