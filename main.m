@@ -18,7 +18,7 @@ rng('default');
 
 % Defining the environment
 % Nodes
-T = 10; targets = 1:1:T;
+T = 5; targets = 1:1:T;
 D = 3;  depots = T+1:1:T+D;
 N = T+D; total_nodes = [targets,depots];
 
@@ -143,7 +143,6 @@ Aineq_pmax = [-1*ones(K,1),temp,zeros(K,(N^2 *K) + T)];
 
 % To ensure only one robot arrives and depart from each target
 Aeq6_7 = zeros(T*2,N^2 *K);
-beq6_7 = ones(T*2,1);
 for k=1:K
     for i=1:T
         for j=1:N
@@ -155,10 +154,11 @@ for k=1:K
         end        
     end
 end
+Aeq6_7 = [zeros(T*2,1),Aeq6_7,zeros(T*2,N^2 *K+T)];
+beq6_7 = ones(T*2,1);
 
 % Robot begins and end at starting position
 Aineq8_9 = zeros(K*2,N^2 *K);
-bineq8_9 = ones(K*2,1);
 for k=1:K
     for i=1:N
         % Equation 8
@@ -168,11 +168,12 @@ for k=1:K
         Aineq8_9(k+K,Bk(k)+(i-1)*N) = 1;        
     end
 end
+Aineq8_9 = [zeros(K*2,1),Aineq8_9, zeros(K*2,N^2 *K +T)];
+bineq8_9 = ones(K*2,1);
 
 % Every robot visits a target, leaves it
 % Equation 10
 Aeq10 = zeros(N*K,N^2 *K);
-beq10 = zeros(N*K,1);
 for k=1:K
     for j=1:N
         for i=1:N
@@ -187,16 +188,15 @@ for k=1:K
         end
     end
 end
-
+Aeq10 = [zeros(N*K,1),Aeq10,zeros(N*K,N^2 *K+T)];
+beq10 = zeros(N*K,1);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Block test 1/2  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-[n,~] = size(bineq8_9);
 bineq = [bineq_pmax;bineq8_9];
-Aineq = [Aineq_pmax; zeros(n,1),Aineq8_9, zeros(n,N^2 *K +T)];
+Aineq = [Aineq_pmax;Aineq8_9];
 
 beq = [beq6_7;beq10];
-[m,~] = size(beq);
-Aeq = [zeros(m,1),[Aeq6_7;Aeq10], zeros(m,N^2 *K +T)];
+Aeq = [Aeq6_7;Aeq10];
 
 X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
 
@@ -214,111 +214,98 @@ end
 
 %% Capacity & Flow Constraints
 
-x_Aeq2 = zeros(1,(N^2 *K));
-p_Aeq2 = zeros(1,(N^2 *K));
+% Equation 11: flow through the starting node
+x_Aeq11 = zeros(K,(N^2 *K));
+p_Aeq11 = zeros(K,(N^2 *K));
 temp = zeros(1,(N^2 *K));
-
-x_Aineq2 = zeros(1,(N^2 *K));
-p_Aineq2 = zeros(1,(N^2 *K));
-bineq2 = zeros(1,1);
-
-% flow through the starting node
 for k=1:K
     for i=1:N
         for j=1:N
             if i<=T
-                % Equation 11 - Part 1/2
-                x_Aeq2(k,j+(i-1)*N+(k-1)*N^2) = -1;
-                beq2(k,1) = 0;
-                
-                % Equation 12 - Part 1/2
-                x_Aeq2(K+i+(k-1)*T,j+(i-1)*N+(k-1)*N^2) = -1;
-                beq2(K+i+(k-1)*T,1) = 0;
-            end
-            
+                x_Aeq11(k,j+(i-1)*N+(k-1)*N^2) = -1;
+            end 
         end
-        % Equation 11 - Part 2/2
-        p_Aeq2(k,i+(Bk(k)-1)*N+(k-1)*N^2) = 1;
+        p_Aeq11(k,i+(Bk(k)-1)*N+(k-1)*N^2) = 1;
         temp(1,Bk(k)+(i-1)*N+(k-1)*N^2) = -1;
-        p_Aeq2(k,:) = p_Aeq2(k,:) + temp(1,:);
+        p_Aeq11(k,:) = p_Aeq11(k,:) + temp(1,:);
         temp = zeros(1,(N^2 *K));
     end
 end
+Aeq11 = [zeros(K,1),x_Aeq11,p_Aeq11,zeros(K,T)];
+beq11(K,1) = 0;
 
-temp = zeros(1,(N^2 *K));
-[y,~] = size(p_Aeq2);
-count =1;
+% Equation 12 : Capacity updated after visiting each node
+x_Aeq12 = zeros(T*K,(N^2 *K));
+p_Aeq12 = zeros(T*K,(N^2 *K));
+temp = zeros(1,(N^2 *K));           
 for k=1:K
-    for i=1:N
+    for i=1:T
         for j=1:N
-            % Equation 12 - Part 2/2
-            if i<=T
-                if j==i
-                    flag=0;
-                else
-                    flag=1;
-                end
-                p_Aeq2(y+i+(k-1)*T,j +(i-1)*N +(k-1)*N^2) = -1*flag;
-                temp(1,i +(j-1)*N +(k-1)*N^2) = 1*flag;
-                p_Aeq2(y+i+(k-1)*T,:) = p_Aeq2(y+i+(k-1)*T,:) + temp(1,:);
-                temp = zeros(1,(N^2 *K));
+            x_Aeq12(i+(k-1)*T,j+(i-1)*N+(k-1)*N^2) = -1;
+            if j==i
+                flag=0;
+            else
+                flag=1;
             end
+            p_Aeq12(i+(k-1)*T,j +(i-1)*N +(k-1)*N^2) = -1*flag;
+            temp(1,i +(j-1)*N +(k-1)*N^2) = 1*flag;
+            p_Aeq12(i+(k-1)*T,:) = p_Aeq12(i+(k-1)*T,:) + temp(1,:);
+            temp = zeros(1,(N^2 *K));
+            
         end
     end
 end
+Aeq12 = [zeros(T*K,1),x_Aeq12,p_Aeq12,zeros(T*K,T)];
+beq12(T*K,1) = 0; 
 
-[y,~] = size(p_Aeq2);
-[m,~] = size(beq2);
-count =1;
+% Equation 13 : Capacity remains the same after passing a depot
+x_Aeq13 = zeros(D*K,(N^2 *K));
+p_Aeq13 = zeros(D*K,(N^2 *K));
+temp = zeros(1,(N^2 *K)); 
+count = 1;
 for k=1:K
     for i=T+1:N
         for j=1:N
-            % Equation 13
-            if i>T
-                if j==i
-                    flag=0;
-                else
-                    flag=1;
-                end
-                p_Aeq2(y+count,j +(i-1)*N +(k-1)*N^2) = -1*flag;
-                temp(1,i +(j-1)*N +(k-1)*N^2) = 1*flag;
-                p_Aeq2(y+count,:) = p_Aeq2(y+count,:) + temp(1,:);
-                temp = zeros(1,(N^2 *K));
-               
-                beq2(m+count,1) = 0;
-            end
+           if j==i
+               flag=0;
+           else
+               flag=1;
+           end
+           p_Aeq13(count,j +(i-1)*N +(k-1)*N^2) = -1*flag;
+           temp(1,i +(j-1)*N +(k-1)*N^2) = 1*flag;
+           p_Aeq13(count,:) = p_Aeq13(count,:) + temp(1,:);
+           temp = zeros(1,(N^2 *K));
         end
         count = count +1;
     end
 end
+Aeq13 = [zeros(D*K,1),x_Aeq13, p_Aeq13,zeros(D*K,T)];
+beq13 = zeros(D*K,1);
 
-% %Equation 14 - Part 2/2
-% count = 1;
-% for k=1:K
-%     for i=1:N
-%         for j=1:N
-%             p_Aineq2(count,j+(i-1)*N+(k-1)*N^2) = 1;
-%             x_Aineq2(count,j+(i-1)*N+(k-1)*N^2) = -T;
-%             bineq2(count,1) = 0;
-%             count = count+1;
-%         end
-%     end
-% end
+%Equation 14 - Part 2/2
+% target capacity should not exceed T
+count = 1;
+x_Aineq14 = zeros(N^2 *K,(N^2 *K));
+p_Aineq14 = zeros(N^2 *K,(N^2 *K));
+for k=1:K
+    for i=1:N
+        for j=1:N
+            p_Aineq14(count,j+(i-1)*N+(k-1)*N^2) = 1;
+            x_Aineq14(count,j+(i-1)*N+(k-1)*N^2) = -T;
+            count = count+1;
+        end
+    end
+end
+Aineq14 = [zeros(N^2*K,1),x_Aineq14,p_Aineq14,zeros(N^2 *K,T)];
+bineq14 = zeros(N^2 *K,1);
 
-[x,~] = size(x_Aeq2);
-[y,~] = size(p_Aeq2);
-[m,~] = size(beq2);
-Aeq2 = [[x_Aeq2;zeros(y-x,(N^2 *K))],p_Aeq2,zeros(m,T)];
-
-[x,~] = size(x_Aineq2);
-[n,~] = size(bineq2);
-Aineq2 = [x_Aineq2,p_Aineq2,zeros(x,T)];
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Block test 2/2  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-Aineq = [Aineq; zeros(n,1), Aineq2];
-bineq = [bineq;bineq2];
-Aeq = [Aeq;zeros(m,1), Aeq2];
-beq = [beq;beq2];
+bineq = [bineq_pmax;bineq8_9;bineq14];
+Aineq = [Aineq_pmax;Aineq8_9;Aineq14];
+
+beq = [beq6_7;beq10;beq11;beq12;beq13];
+Aeq = [Aeq6_7;Aeq10;Aeq11;Aeq12;Aeq13];
 
 X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
 
@@ -340,94 +327,91 @@ end
 % Large constant
 M = (L + max(fij(:)));
 
-r_Aineq2 = zeros(1,N);
-x_Aineq2f = zeros(1,(N^2 *K));
-
+% Equation 15 & 16
+% fuel lost between two nodes = fuel cost of travelling between them
+r_Aineq15_16 = zeros(T^2 *K *2,T);
+x_Aineq15_16 = zeros(T^2 *K *2,(N^2 *K));
 count = 1;
-[m,~] = size(bineq2);
-[r,~] = size(r_Aineq2);
 for k=1:K
     for i=1:T
         for j=1:T
             % Equation 15
-            r_Aineq2(count,j) = 1;
-            r_Aineq2(count,i) = -1;
-            x_Aineq2f(count,j+(i-1)*N+(k-1)*N^2) = M;
-            
-            bineq2(m+count,1) = M-fij(i,j);
+            r_Aineq15_16(count,j) = 1;
+            r_Aineq15_16(count,i) = -1;
+            x_Aineq15_16(count,j+(i-1)*N+(k-1)*N^2) = M;
             
             % Equation 16
-            r_Aineq2(T^2 *K+count,j) = -1;
-            r_Aineq2(T^2 *K+count,i) = 1;
-            x_Aineq2f(T^2 *K+count,j+(i-1)*N+(k-1)*N^2) = M;
-            
-            bineq2(T^2 *K+m+count,1) = M+fij(i,j);
-            
+            r_Aineq15_16(T^2 *K+count,j) = -1;
+            r_Aineq15_16(T^2 *K+count,i) = 1;
+            x_Aineq15_16(T^2 *K+count,j+(i-1)*N+(k-1)*N^2) = M;
+             
             count = count+1;
         end
     end
 end
-
+Aineq15_16 = [zeros(T^2 *K *2,1),x_Aineq15_16,zeros(T^2 *K*2,(N^2 *K)),r_Aineq15_16];
+bineq15_16 = [(M-fij(i,j))*ones(T^2 *K,1); (M+fij(i,j))*ones(T^2 *K,1)];
+                      
+% Equation 17 & 18
+% fuel level at target visited after leaving a depot = fuel capacity - fuel
+% cost of traversal
+r_Aineq17_18 = zeros(D*T*K *2,T);
+x_Aineq17_18 = zeros(D*T*K *2,(N^2 *K));
 count = 1;
-[m,~] = size(bineq2);
-[r,~] = size(r_Aineq2);
 for k=1:K
     for i=T+1:N
         for j=1:T
             % Equation 17
-            r_Aineq2(r+count,j) = -1;
-            x_Aineq2f(r+count,j+(i-1)*N+(k-1)*N^2) = M;
-            bineq2(m+count,1) = M-L+fij(i,j);
+            r_Aineq17_18(count,j) = -1;
+            x_Aineq17_18(count,j+(i-1)*N+(k-1)*N^2) = M;
             
             % Equation 18
-            r_Aineq2(D*T*K+r+count,j) = 1;
-            x_Aineq2f(D*T*K+r+count,j+(i-1)*N+(k-1)*N^2) = M;
-            bineq2(D*T*K+m+count,1) = M+L-fij(i,j);
+            r_Aineq17_18(D*T*K+count,j) = 1;
+            x_Aineq17_18(D*T*K+count,j+(i-1)*N+(k-1)*N^2) = M;
             
             count = count+1;
         end
     end
 end
-
+Aineq17_18 = [zeros(D*T*K *2,1),x_Aineq17_18,zeros(D*T*K*2,(N^2 *K)),r_Aineq17_18];
+bineq17_18 = [(M-fij(i,j))*ones(D*T*K,1); (M+fij(i,j))*ones(D*T*K,1)];
+            
+% Equation 19
+% restricts fuel lost in approaching a depot to being most the cost to 
+% travel from the preceding target
+r_Aineq19 = zeros(T*D*K,T);
+x_Aineq19 = zeros(T*D*K,(N^2 *K));
 count = 1;
-[m,~] = size(bineq2);
-[r,~] = size(r_Aineq2);
 for k=1:K
     for i=1:T
         for j=T+1:N
-            % Equation 19
-            r_Aineq2(r+count,j) = -1;
-            x_Aineq2f(r+count,j+(i-1)*N+(k-1)*N^2) = M;
-            bineq2(m+count,1) = M-fij(i,j);
+            r_Aineq19(count,i) = -1;
+            x_Aineq19(count,j+(i-1)*N+(k-1)*N^2) = M;
             count = count+1;
         end
     end
 end
-
-[x,~] = size(x_Aineq2f);
-Aineq2 = [Aineq2; x_Aineq2f,zeros(x,N^2 *K),r_Aineq2];
-
-% To get the total number of in/equality equations
-[m,~] = size(beq2);
-[n,~] = size(bineq2);
-eq_count2 = m;
-ineq_count2 = n;
-
+Aineq19 = [zeros(T*D*K,1),x_Aineq19,zeros(T*D*K,(N^2 *K)),r_Aineq19];
+bineq19(T*D*K,1) = M-fij(i,j);
 
 %% CPLEX optimization
 
-% total number of in/equality equations
-eq_count = eq_count1 + eq_count2;
-ineq_count = ineq_count1 + ineq_count2 + K;
+% Combining the matrices
+bineq = [bineq_pmax;bineq8_9;bineq14;bineq15_16;bineq17_18;bineq19];
+Aineq = [Aineq_pmax;Aineq8_9;Aineq14;Aineq15_16;Aineq17_18;Aineq19];
+
+beq = [beq6_7;beq10;beq11;beq12;beq13];
+Aeq = [Aeq6_7;Aeq10;Aeq11;Aeq12;Aeq13];
+
+% To get the total number of in/equality equations
+[m,~] = size(beq);
+[n,~] = size(bineq);
+eq_count = m;
+ineq_count = n;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%% Final formulation %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Combining the matrices
-Aineq = [Aineq_pmax;zeros(ineq_count1,1),Aineq1, zeros(ineq_count1,N^2 *K +N);zeros(ineq_count2,1),Aineq2];
-bineq = [bineq_pmax;bineq1;bineq2];
-Aeq = [zeros(eq_count1,1),Aeq1,zeros(eq_count1,N^2 *K+N);zeros(eq_count2,1),Aeq2];
-beq = [beq1;beq2];
 
-X = intlinprog(f,(N^2 *K)*2 + N +1,Aineq,bineq,Aeq,beq,lb,ub)
+X = intlinprog(f,(N^2 *K)*2 + T +1,Aineq,bineq,Aeq,beq,lb,ub)
 
 tic
 Y = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
