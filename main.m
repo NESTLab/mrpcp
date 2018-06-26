@@ -73,7 +73,7 @@ fij = ones(N);    %todo: revise
 % Pmax   : max path length among robots     [1]
 % x_kij  : {0,1}       for k in K, i,j in N [K * N * N]
 % p_kij  : {0,1,...,T} for k in K, i,j in N [K * N * N]
-% ri     : {0,1,...,L} for i in N [T]
+% ri     : {0,1,...,L} for i in T [T]
 
 % Total number of variables
 total_vars = 1 + (N^2 *K)*2 + T;
@@ -124,7 +124,7 @@ ub = [Inf;ub1;ub2;ub3];
 
 %% Including the constraint of Pmax
 % minmax -> min constraint
-
+% Equation 3
 bineq_pmax = zeros(K,1);
 
 temp = zeros(K,N^2 *K);
@@ -162,10 +162,10 @@ Aineq8_9 = zeros(K*2,N^2 *K);
 for k=1:K
     for i=1:N
         % Equation 8
-        Aineq8_9(k,i+(Bk(k)-1)*N) = 1;
+        Aineq8_9(k,i+(Bk(k)-1)*N+(k-1)*N^2) = 1;
         
         % Equation 9
-        Aineq8_9(k+K,Bk(k)+(i-1)*N) = 1;        
+        Aineq8_9(k+K,Bk(k)+(i-1)*N+(k-1)*N^2) = 1;        
     end
 end
 Aineq8_9 = [zeros(K*2,1),Aineq8_9, zeros(K*2,N^2 *K +T)];
@@ -177,11 +177,11 @@ Aeq10 = zeros(N*K,N^2 *K);
 for k=1:K
     for j=1:N
         for i=1:N
-            if j==i
-                flag=0;
-            else
-                flag=1;
-            end
+%             if j==i
+%                 flag=0;
+%             else
+%                 flag=1;
+%             end
             flag = 1; % todo
             Aeq10(j+(k-1)*N,j +(i-1)*N +(k-1)*N^2) = 1*flag;
             Aeq10(j+(k-1)*N,i +(j-1)*N +(k-1)*N^2) = -1*flag;
@@ -192,24 +192,24 @@ Aeq10 = [zeros(N*K,1),Aeq10,zeros(N*K,N^2 *K+T)];
 beq10 = zeros(N*K,1);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Block test 1/2  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-bineq = [bineq_pmax;bineq8_9];
-Aineq = [Aineq_pmax;Aineq8_9];
-
-beq = [beq6_7;beq10];
-Aeq = [Aeq6_7;Aeq10];
-
-X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
-
-% Visualization
-if ~isempty(X)
-    adaj = zeros(N,N);
-    for k=1:K
-        start = 2+(k-1)*N^2; 
-        A(:,:,k) = reshape(X(start:start+N^2 -1),[N,N]);
-        
-        map(A(:,:,k), k, T, N, x_pos, y_pos);
-    end
-end
+% bineq = [bineq_pmax;bineq8_9];
+% Aineq = [Aineq_pmax;Aineq8_9];
+% 
+% beq = [beq6_7;beq10];
+% Aeq = [Aeq6_7;Aeq10];
+% 
+% X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
+% 
+% % Visualization
+% if ~isempty(X)
+%     adaj = zeros(N,N);
+%     for k=1:K
+%         start = 2+(k-1)*N^2; 
+%         A(:,:,k) = transpose(reshape(X(start:start+N^2 -1),[N,N]));
+%         
+%         map(A(:,:,k), k, T, N, x_pos, y_pos);
+%     end
+% end
 
 
 %% Capacity & Flow Constraints
@@ -217,7 +217,6 @@ end
 % Equation 11: flow through the starting node
 x_Aeq11 = zeros(K,(N^2 *K));
 p_Aeq11 = zeros(K,(N^2 *K));
-temp = zeros(1,(N^2 *K));
 for k=1:K
     for i=1:N
         for j=1:N
@@ -225,10 +224,10 @@ for k=1:K
                 x_Aeq11(k,j+(i-1)*N+(k-1)*N^2) = -1;
             end 
         end
-        p_Aeq11(k,i+(Bk(k)-1)*N+(k-1)*N^2) = 1;
-        temp(1,Bk(k)+(i-1)*N+(k-1)*N^2) = -1;
-        p_Aeq11(k,:) = p_Aeq11(k,:) + temp(1,:);
-        temp = zeros(1,(N^2 *K));
+        if i~= Bk(k)
+            p_Aeq11(k,i+(Bk(k)-1)*N+(k-1)*N^2) = 1;
+            p_Aeq11(k,Bk(k)+(i-1)*N+(k-1)*N^2) = -1;
+        end
     end
 end
 Aeq11 = [zeros(K,1),x_Aeq11,p_Aeq11,zeros(K,T)];
@@ -237,7 +236,6 @@ beq11(K,1) = 0;
 % Equation 12 : Capacity updated after visiting each node
 x_Aeq12 = zeros(T*K,(N^2 *K));
 p_Aeq12 = zeros(T*K,(N^2 *K));
-temp = zeros(1,(N^2 *K));           
 for k=1:K
     for i=1:T
         for j=1:N
@@ -248,10 +246,7 @@ for k=1:K
                 flag=1;
             end
             p_Aeq12(i+(k-1)*T,j +(i-1)*N +(k-1)*N^2) = -1*flag;
-            temp(1,i +(j-1)*N +(k-1)*N^2) = 1*flag;
-            p_Aeq12(i+(k-1)*T,:) = p_Aeq12(i+(k-1)*T,:) + temp(1,:);
-            temp = zeros(1,(N^2 *K));
-            
+            p_Aeq12(i+(k-1)*T,i +(j-1)*N +(k-1)*N^2) = 1*flag;            
         end
     end
 end
@@ -261,7 +256,6 @@ beq12(T*K,1) = 0;
 % Equation 13 : Capacity remains the same after passing a depot
 x_Aeq13 = zeros(D*K,(N^2 *K));
 p_Aeq13 = zeros(D*K,(N^2 *K));
-temp = zeros(1,(N^2 *K)); 
 count = 1;
 for k=1:K
     for i=T+1:N
@@ -272,9 +266,7 @@ for k=1:K
                flag=1;
            end
            p_Aeq13(count,j +(i-1)*N +(k-1)*N^2) = -1*flag;
-           temp(1,i +(j-1)*N +(k-1)*N^2) = 1*flag;
-           p_Aeq13(count,:) = p_Aeq13(count,:) + temp(1,:);
-           temp = zeros(1,(N^2 *K));
+           p_Aeq13(count,i +(j-1)*N +(k-1)*N^2) = 1*flag;
         end
         count = count +1;
     end
@@ -314,7 +306,7 @@ if ~isempty(X)
     adaj = zeros(N,N);
     for k=1:K
         start = 2+(k-1)*N^2; 
-        A(:,:,k) = reshape(X(start:start+N^2 -1),[N,N]);
+        A(:,:,k) = transpose(reshape(X(start:start+N^2 -1),[N,N]));
         
         map(A(:,:,k), k, T, N, x_pos, y_pos);
     end
