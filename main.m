@@ -26,10 +26,10 @@ N = T+D; total_nodes = [targets,depots];
 K = 2;
 
 % Fuel capacity
-L = 1000; %todo :revise
+L = 10; %todo :revise
 
 % Ratio of time needed to refuel and time spent traversing the tour
-qk = randi([0,1],K,1); %todo: revise
+qk = rand(K,1)/2;
 
 % Define the starting point of the robots
 Bk = randi([depots(1),depots(D)],K,1); %D(1:K); %starting from depots
@@ -64,8 +64,8 @@ cij_per_robot = reshape(e_dist',N^2,1);
 % end
 
 % Fuel cost between two nodes
-fij = ones(N);    %todo: revise
-
+fij = [e_dist(1:T,1:T),0.5*L*ones(T,D); ...
+       0.5*L*ones(D,T),0.8*L*ones(D,D)];
 %%%%%%%%%%%%%%%%%%%%%%%%%% Decision variables %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 % SYMBOL : DESCRIPTION [MULTIPLICITY]
@@ -177,14 +177,8 @@ Aeq10 = zeros(N*K,N^2 *K);
 for k=1:K
     for j=1:N
         for i=1:N
-%             if j==i
-%                 flag=0;
-%             else
-%                 flag=1;
-%             end
-            flag = 1; % todo
-            Aeq10(j+(k-1)*N,j +(i-1)*N +(k-1)*N^2) = 1*flag;
-            Aeq10(j+(k-1)*N,i +(j-1)*N +(k-1)*N^2) = -1*flag;
+            Aeq10(j+(k-1)*N,j +(i-1)*N +(k-1)*N^2) = 1;
+            Aeq10(j+(k-1)*N,i +(j-1)*N +(k-1)*N^2) = -1;
         end
     end
 end
@@ -192,24 +186,24 @@ Aeq10 = [zeros(N*K,1),Aeq10,zeros(N*K,N^2 *K+T)];
 beq10 = zeros(N*K,1);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Block test 1/2  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% bineq = [bineq_pmax;bineq8_9];
-% Aineq = [Aineq_pmax;Aineq8_9];
-% 
-% beq = [beq6_7;beq10];
-% Aeq = [Aeq6_7;Aeq10];
-% 
-% X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
-% 
-% % Visualization
-% if ~isempty(X)
-%     adaj = zeros(N,N);
-%     for k=1:K
-%         start = 2+(k-1)*N^2; 
-%         A(:,:,k) = transpose(reshape(X(start:start+N^2 -1),[N,N]));
-%         
-%         map(A(:,:,k), k, T, N, x_pos, y_pos);
-%     end
-% end
+bineq = [bineq_pmax;bineq8_9];
+Aineq = [Aineq_pmax;Aineq8_9];
+
+beq = [beq6_7;beq10];
+Aeq = [Aeq6_7;Aeq10];
+
+X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
+
+% Visualization
+if ~isempty(X)
+    adaj = zeros(N,N);
+    for k=1:K
+        start = 2+(k-1)*N^2; 
+        A(:,:,k) = transpose(reshape(X(start:start+N^2 -1),[N,N]));
+        
+        map(A(:,:,k), k, T, N, x_pos, y_pos);
+    end
+end
 
 
 %% Capacity & Flow Constraints
@@ -296,8 +290,8 @@ bineq14 = zeros(N^2 *K,1);
 bineq = [bineq_pmax;bineq8_9;bineq14];
 Aineq = [Aineq_pmax;Aineq8_9;Aineq14];
 
-beq = [beq6_7;beq10;beq11;beq12;beq13];
-Aeq = [Aeq6_7;Aeq10;Aeq11;Aeq12;Aeq13];
+beq = [beq6_7;beq10;beq11;beq12];%;beq13];
+Aeq = [Aeq6_7;Aeq10;Aeq11;Aeq12];%;Aeq13];
 
 X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
 
@@ -392,8 +386,8 @@ bineq19(T*D*K,1) = M-fij(i,j);
 bineq = [bineq_pmax;bineq8_9;bineq14;bineq15_16;bineq17_18;bineq19];
 Aineq = [Aineq_pmax;Aineq8_9;Aineq14;Aineq15_16;Aineq17_18;Aineq19];
 
-beq = [beq6_7;beq10;beq11;beq12;beq13];
-Aeq = [Aeq6_7;Aeq10;Aeq11;Aeq12;Aeq13];
+beq = [beq6_7;beq10;beq11;beq12];%;beq13];
+Aeq = [Aeq6_7;Aeq10;Aeq11;Aeq12];%;Aeq13];
 
 % To get the total number of in/equality equations
 [m,~] = size(beq);
@@ -402,21 +396,18 @@ eq_count = m;
 ineq_count = n;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%% Final formulation %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-X = intlinprog(f,(N^2 *K)*2 + T +1,Aineq,bineq,Aeq,beq,lb,ub)
-
 tic
-Y = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
+X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
 toc
 
+% Visualization
 if ~isempty(X)
     adaj = zeros(N,N);
     for k=1:K
         start = 2+(k-1)*N^2; 
-        A(:,:,k) = reshape(X(start:start+N^2 -1),[N,N]);
-        adaj = adaj + A(:,:,k);
+        A(:,:,k) = transpose(reshape(X(start:start+N^2 -1),[N,N]));
+        
+        map(A(:,:,k), k, T, N, x_pos, y_pos);
     end
-    plot(graph(adaj),'XData', x_pos, 'YData', y_pos);
 end
-
 
