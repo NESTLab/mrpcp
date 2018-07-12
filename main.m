@@ -73,10 +73,10 @@ fij = [e_dist(1:T,1:T),0.5*L*ones(T,D); ...
 % Pmax   : max path length among robots     [1]
 % x_kij  : {0,1}       for k in K, i,j in N [K * N * N]
 % p_kij  : {0,1,...,T} for k in K, i,j in N [K * N * N]
-% ri     : {0,1,...,L} for i in T [T]
+% ri(k)  : {0,1,...,L} for i in T [T * K]
 
 % Total number of variables
-total_vars = 1 + (N^2 *K)*2 + T*2;
+total_vars = 1 + (N^2 *K)*2 + T*K;
 
 % Obtaining ctype: for CPLEX MILP solver
 ctype(1) = char('C');
@@ -92,7 +92,7 @@ for k=1:K
 end
 
 % Objective function to be minimized
-f = [1;zeros((N^2 *K)*2 + T*2,1)];
+f = [1;zeros((N^2 *K)*2 + T*K,1)];
 
 
 %% Integer (bound) constraints
@@ -115,8 +115,8 @@ lb2 = zeros(N^2 *K,1);
 ub2 = T*ones(N^2 *K,1); 
 
 % Equation 20
-lb3 = zeros(T*2,1);
-ub3 = L*ones(T*2,1);
+lb3 = zeros(T*K,1);
+ub3 = L*ones(T*K,1);
 
 lb = [0;lb1;lb2;lb3];
 ub = [Inf;ub1;ub2;ub3];
@@ -136,7 +136,7 @@ for k=1:K
     end
 end
 
-Aineq_pmax = [-1*ones(K,1),temp,zeros(K,(N^2 *K) + T*2)];
+Aineq_pmax = [-1*ones(K,1),temp,zeros(K,(N^2 *K) + T*K)];
 
 
 %% Degree Constraints
@@ -154,7 +154,7 @@ for k=1:K
         end        
     end
 end
-Aeq6_7 = [zeros(T*2,1),Aeq6_7,zeros(T*2,N^2 *K+T*2)];
+Aeq6_7 = [zeros(T*2,1),Aeq6_7,zeros(T*2,N^2 *K+T*K)];
 beq6_7 = ones(T*2,1);
 
 % Robot begins and end at starting position
@@ -168,7 +168,7 @@ for k=1:K
         Aineq8_9(k+K,Bk(k)+(i-1)*N+(k-1)*N^2) = 1;        
     end
 end
-Aineq8_9 = [zeros(K*2,1),Aineq8_9, zeros(K*2,N^2 *K +T*2)];
+Aineq8_9 = [zeros(K*2,1),Aineq8_9, zeros(K*2,N^2 *K +T*K)];
 bineq8_9 = ones(K*2,1);
 
 % Every robot visits a target, leaves it
@@ -182,7 +182,7 @@ for k=1:K
         end
     end
 end
-Aeq10 = [zeros(N*K,1),Aeq10,zeros(N*K,N^2 *K+T*2)];
+Aeq10 = [zeros(N*K,1),Aeq10,zeros(N*K,N^2 *K+T*K)];
 beq10 = zeros(N*K,1);
 
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%% Block test 1/2  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -224,7 +224,7 @@ for k=1:K
         end
     end
 end
-Aeq11 = [zeros(K,1),x_Aeq11,p_Aeq11,zeros(K,T*2)];
+Aeq11 = [zeros(K,1),x_Aeq11,p_Aeq11,zeros(K,T*K)];
 beq11(K,1) = 0;
 
 % Equation 12 : Capacity updated after visiting each node
@@ -241,7 +241,7 @@ for k=1:K
         end
     end
 end
-Aeq12 = [zeros(T*K,1),x_Aeq12,p_Aeq12,zeros(T*K,T*2)];
+Aeq12 = [zeros(T*K,1),x_Aeq12,p_Aeq12,zeros(T*K,T*K)];
 beq12(T*K,1) = 0; 
 
 % Equation 13 : Capacity remains the same after passing a depot
@@ -251,7 +251,7 @@ count = 1;
 for k=1:K
     for i=T+1:N
         for j=1:N
-           if j~=i & i~=Bk(k)
+           if j~=i && i~=Bk(k)
             p_Aeq13(count,j +(i-1)*N +(k-1)*N^2) = -1;
             p_Aeq13(count,i +(j-1)*N +(k-1)*N^2) = 1;
            end
@@ -259,7 +259,7 @@ for k=1:K
         count = count +1;
     end
 end
-Aeq13 = [zeros(D*K,1),x_Aeq13, p_Aeq13,zeros(D*K,T*2)];
+Aeq13 = [zeros(D*K,1),x_Aeq13, p_Aeq13,zeros(D*K,T*K)];
 beq13 = zeros(D*K,1);
 
 %Equation 14 - Part 2/2
@@ -276,7 +276,7 @@ for k=1:K
         end
     end
 end
-Aineq14 = [zeros(N^2*K,1),x_Aineq14,p_Aineq14,zeros(N^2 *K,T*2)];
+Aineq14 = [zeros(N^2*K,1),x_Aineq14,p_Aineq14,zeros(N^2 *K,T*K)];
 bineq14 = zeros(N^2 *K,1);
 
 
@@ -309,7 +309,7 @@ M = (L + max(fij(:)));
 
 % Equation 15 & 16
 % fuel lost between two nodes = fuel cost of travelling between them
-r_Aineq15_16 = zeros(T^2 *K *2,T*2);
+r_Aineq15_16 = zeros(T^2 *K *2,T*K);
 x_Aineq15_16 = zeros(T^2 *K *2,(N^2 *K));
 count = 1;
 for k=1:K
@@ -339,7 +339,7 @@ bineq15_16 = [(M-fij(i,j))*ones(T^2 *K,1); (M+fij(i,j))*ones(T^2 *K,1)];
 % Equation 17 & 18
 % fuel level at target visited after leaving a depot = fuel capacity - fuel
 % cost of traversal
-r_Aineq17_18 = zeros(D*T*K *2,T*2);
+r_Aineq17_18 = zeros(D*T*K *2,T*K);
 x_Aineq17_18 = zeros(D*T*K *2,(N^2 *K));
 count = 1;
 for k=1:K
@@ -363,7 +363,7 @@ bineq17_18 = [(M-L+fij(i,j))*ones(D*T*K,1); (M+L-fij(i,j))*ones(D*T*K,1)];
 % Equation 19
 % restricts fuel lost in approaching a depot to being most the cost to 
 % travel from the preceding target
-r_Aineq19 = zeros(T*D*K,T*2);
+r_Aineq19 = zeros(T*D*K,T*K);
 x_Aineq19 = zeros(T*D*K,(N^2 *K));
 count = 1;
 for k=1:K
