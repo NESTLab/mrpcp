@@ -1,31 +1,20 @@
-%% Environment map
-% Getting the shortest distance between two nodes
+%% Visualization of the path generated for each robot
 
-%% Distances
-% Targets
-xt = randi(10,targets,1);
-yt = randi(10,targets,1);
-
-% Depots
-xd = randi(10,depots,1);
-yd = randi(10,depots,1);
-
-nodes = [xt,yt;xd,yd];
-
-e_dist = pdist2(nodes,nodes);
-cij_per_robot = reshape(e_dist',total_nodes^2,1);
-cij=zeros(total_nodes^2 *K,1);
-for k=1:K
-    cij(1+(k-1)*total_nodes^2:(k*total_nodes^2),1)=cij_per_robot;
+function [] = map(A, robot, T, D, K, N, x_pos, y_pos, L)
+    figure;
+    G = digraph(A);
+    h = plot(G,'XData', x_pos, 'YData', y_pos);
+    axis square
+    hold on
+    title("Path of Robot "+num2str(robot));
+    highlight(h,[1:1:T])
+    highlight(h,[T+1:1:N],'NodeColor','r')
+    
+    filename = "data\"+num2str(T)+"_"+num2str(D)+"_"+num2str(K)+"_"+num2str(L)+"_"+"_Robot"+num2str(robot);
+    saveas(h, filename,'jpeg')
 end
 
-%% Visualization
-% figure;
-% axis equal;
-% scatter(xt,yt);
-% xlim([0 10]);
-% ylim([0 10]);
-% hold on
-% scatter(xd,yd);
-% title("Map");
-% legend('Targets', 'Depots');
+
+
+
+
