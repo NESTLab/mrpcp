@@ -18,15 +18,15 @@ rng('default');
 
 % Defining the environment
 % Nodes
-T = 5; targets = 1:1:T;
-D = 3;  depots = T+1:1:T+D;
+T = input('Enter number of target nodes = '); targets = 1:1:T;
+D = input('Number of depots = ');  depots = T+1:1:T+D;
 N = T+D; total_nodes = [targets,depots];
 
 % Number of robots
-K = 2;
+K = input('Number of robots = ');
 
 % Fuel capacity
-L = 2*T; %todo :revise
+L = input(strcat('Whats the fuel capacity? Enter value between 1 to ',int2str(2*T), ' ')); %todo :revise
 
 % Ratio of time needed to refuel and time spent traversing the tour
 qk = 0.1*ones(K,1);%rand(K,1)/2;
@@ -201,7 +201,7 @@ beq10 = zeros(N*K,1);
 %         start = 2+(k-1)*N^2; 
 %         A(:,:,k) = transpose(reshape(X(start:start+N^2 -1),[N,N]));
 %         
-%         map(A(:,:,k), k, T, N, x_pos, y_pos);
+%         map(A(:,:,k), k, T, D, K, N, x_pos, y_pos, L);
 %     end
 % end
 
@@ -296,7 +296,7 @@ bineq14 = zeros(N^2 *K,1);
 %         start = 2+(k-1)*N^2; 
 %         A(:,:,k) = transpose(reshape(X(start:start+N^2 -1),[N,N]));
 %         
-%         map(A(:,:,k), k, T, N, x_pos, y_pos);
+%         map(A(:,:,k), k, T, D, K, N, x_pos, y_pos, L);
 %     end
 % end
 
@@ -407,7 +407,7 @@ if ~isempty(X)
         start = 2+(k-1)*N^2; 
         A(:,:,k) = transpose(reshape(X(start:start+N^2 -1),[N,N]));
         
-        map(A(:,:,k), k, T, N, x_pos, y_pos);
+        map(A(:,:,k), k, T, D, K, N, x_pos, y_pos, L);
     end
 end
 
