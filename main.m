@@ -1,3 +1,10 @@
+% Uncomment addpath statements for server use
+% addpath('/cm/shared/apps/ibm/ILOG/CPLEX_Studio128/cplex/matlab/')
+% addpath('/cm/shared/apps/ibm/ILOG/CPLEX_Studio128/cplex/matlab/x86-64_linux/')
+% addpath('/cm/shared/apps/ibm/ILOG/CPLEX_Studio128/cplex/matlab/x86-64_linux/help')
+% addpath('/cm/shared/apps/ibm/ILOG/CPLEX_Studio128/cplex/matlab/x86-64_linux/help/helpsearch-v2/')
+% addpath('/cm/shared/apps/ibm/ILOG/CPLEX_Studio128/cplex/matlab/x86-64_linux/help/topics/')
+
 
 %% MILP Formulation of Multi-Robot Long-Term Persistent Coverage Problem
 %
@@ -13,7 +20,7 @@
 clc; clear all; close all;
 % Mersenne-Twister with seed 0
 % This makes the current execution repeatable
-rng('default');
+%rng('default');
 
 
 % Defining the environment
@@ -29,10 +36,10 @@ K = input('Number of robots = ');
 L = input(strcat('Whats the fuel capacity? Enter value between 1 to ',int2str(2*T), ' ')); %todo :revise
 
 % Ratio of time needed to refuel and time spent traversing the tour
-qk = 0.1*ones(K,1);%rand(K,1)/2;
+qk = 0.5*ones(K,1);%rand(K,1)/2;
 
 % Define the starting point of the robots
-Bk = randi([depots(1),depots(D)],K,1); %D(1:K); %starting from depots
+Bk = randi([depots(1),depots(D)],K,1);%depots(1:K); %starting from depots
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%% Node Generation %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Targets
@@ -63,8 +70,11 @@ cij_per_robot = reshape(e_dist',N^2,1);
 %     cij(1+(k-1)*total_nodes^2:(k*total_nodes^2),1)=cij_per_robot;
 % end
 
+% Mapping distance between nodes to battery levels
+alpha = 0.1;
+mapping = e_dist*alpha;
 % Fuel cost between two nodes
-fij = [e_dist(1:T,1:T),0.5*L*ones(T,D); ...
+fij = [L*mapping(1:T,1:T),0.5*L*ones(T,D); ...
        0.5*L*ones(D,T),0.8*L*ones(D,D)];
 %%%%%%%%%%%%%%%%%%%%%%%%%% Decision variables %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
@@ -131,7 +141,7 @@ temp = zeros(K,N^2 *K);
 for k=1:K
     for i=1:N
         for j=1:N
-            temp(k,j+(i-1)*N+(k-1)*N^2) = (1+qk(k))*cij_per_robot(j+(i-1)*N);
+            temp(k,j+(i-1)*N+(k-1)*N^2) =(1+qk(k))*cij_per_robot(j+(i-1)*N);
         end
     end
 end
@@ -175,10 +185,10 @@ bineq8_9 = ones(K*2,1);
 % Equation 10
 Aeq10 = zeros(N*K,N^2 *K);
 for k=1:K
-    for j=1:N
-        for i=1:N
-            Aeq10(j+(k-1)*N,j +(i-1)*N +(k-1)*N^2) = 1;
-            Aeq10(j+(k-1)*N,i +(j-1)*N +(k-1)*N^2) = -1;
+    for i=1:N
+        for j=1:N
+            Aeq10(i+(k-1)*N,j +(i-1)*N +(k-1)*N^2) = -1;
+            Aeq10(i+(k-1)*N,i +(j-1)*N +(k-1)*N^2) = 1;
         end
     end
 end
@@ -225,7 +235,7 @@ for k=1:K
     end
 end
 Aeq11 = [zeros(K,1),x_Aeq11,p_Aeq11,zeros(K,T*K)];
-beq11(K,1) = 0;
+beq11 = zeros(K,1);
 
 % Equation 12 : Capacity updated after visiting each node
 x_Aeq12 = zeros(T*K,(N^2 *K));
@@ -242,7 +252,7 @@ for k=1:K
     end
 end
 Aeq12 = [zeros(T*K,1),x_Aeq12,p_Aeq12,zeros(T*K,T*K)];
-beq12(T*K,1) = 0; 
+beq12 = zeros(T*K,1); 
 
 % Equation 13 : Capacity remains the same after passing a depot
 x_Aeq13 = zeros(D*K,(N^2 *K));
@@ -252,8 +262,8 @@ for k=1:K
     for i=T+1:N
         for j=1:N
            if j~=i && i~=Bk(k)
-            p_Aeq13(count,j +(i-1)*N +(k-1)*N^2) = -1;
-            p_Aeq13(count,i +(j-1)*N +(k-1)*N^2) = 1;
+            p_Aeq13(count,j +(i-1)*N +(k-1)*N^2) = 1;
+            p_Aeq13(count,i +(j-1)*N +(k-1)*N^2) = -1;
            end
         end
         count = count +1;
@@ -397,8 +407,6 @@ ineq_count = n;
 tic
 X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
 toc
-
-X = cplexmilp(f,Aineq,bineq,Aeq,beq,[],[],[],lb,ub,ctype)
 
 % Visualization
 if ~isempty(X)
